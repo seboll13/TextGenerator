@@ -2,26 +2,49 @@ import networkx as nx
 from numpy.random import choice
 
 class TextGeneratorEngine:
-    def __init__(self, word_pairs):
+    def __init__(self, word_pairs, tag_pairs):
         """Initialise a text generator engine."""
         self.word_pairs = word_pairs
-        self.transition_probabilities = self.compute_transition_probabilities()
+        self.tag_pairs = tag_pairs
+        self.transition_probabilities = self.compute_word_transition_probabilities()
+    
 
-
-    def compute_transition_probabilities(self) -> dict:
+    def compute_word_transition_probabilities(self) -> dict:
         """Return a dictionary matching the transition probabilities between each pair of words."""
         probs = {}
+        tag_probs = self.compute_tag_transition_probabilities()
         # Count
-        for curr_word in self.word_pairs:
-            for next_word in self.word_pairs[curr_word]:
-                if (curr_word, next_word) in probs:
-                    probs[(curr_word, next_word)] += self.word_pairs[curr_word][next_word]
-                else:
-                    probs[(curr_word, next_word)] = self.word_pairs[curr_word][next_word]
+        for t in self.word_pairs:
+            (curr_word, _) = t
+            for next_word, v in self.word_pairs[t].items():
+                i = probs.get((curr_word, next_word), 0)
+                probs[(curr_word, next_word)] = i + v[0]
         # Normalise
-        for curr_word in self.word_pairs:
-            for next_word in self.word_pairs[curr_word]:
-                probs[(curr_word, next_word)] /= self.word_pairs[curr_word][next_word]
+        for t in self.word_pairs:
+            (curr_word, curr_tag) = t
+            _sumprob_words = sum([v[0] for v in self.word_pairs[t].values()])
+            _sumprob_tags = sum([tag_probs[(curr_tag, v[1])] for v in self.word_pairs[t].values()])
+            for next_word, v in self.word_pairs[t].items():
+                probs[(curr_word, next_word)] = v[0] / _sumprob_words
+                probs[(curr_word, next_word)] *= tag_probs[(curr_tag, v[1])] * (1 / _sumprob_tags)
+        return probs
+    
+
+    def compute_tag_transition_probabilities(self) -> dict:
+        """Return a dictionary matching the transition probabilities between each pair of tags."""
+        probs = {}
+        # Count
+        for curr_el in self.tag_pairs:
+            for next_el in self.tag_pairs[curr_el]:
+                if (curr_el, next_el) in probs:
+                    probs[(curr_el, next_el)] += self.tag_pairs[curr_el][next_el]
+                else:
+                    probs[(curr_el, next_el)] = self.tag_pairs[curr_el][next_el]
+        # Normalise
+        for curr_el in self.tag_pairs:
+            _sum = sum(self.tag_pairs[curr_el].values())
+            for next_el in self.tag_pairs[curr_el]:
+                probs[(curr_el, next_el)] = self.tag_pairs[curr_el][next_el] / _sum
         return probs
 
 
@@ -53,8 +76,15 @@ class TextGeneratorEngine:
         return path
 
 
-    def generate_text(self, start_word) -> str:
+    start_words = ['A', 'The', 'It', 'He', 'She', 'They', 'We', 'I', 'You', 'There', 'Here', 'This', 'That', 'These', 'Those', 'My', 'Your']
+
+    def generate_text(self) -> str:
         """Generate a random text from the graph."""
-        start_word = start_word.lower()
+        start_word = choice(self.start_words).lower()
         path = self.random_walk(self.create_graph(), start_word)
         return ' '.join(path)
+    
+
+    def generate_paragraph(self, num_sentences) -> str:
+        """Generate a random paragraph from the graph."""
+        return ' '.join([self.generate_text(choice(self.start_words)) for _ in range(num_sentences)])
